@@ -1,0 +1,1070 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from datetime import datetime, timedelta
+
+# 中文显示配置
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei']
+plt.rcParams['axes.unicode_minus'] = False
+
+# 语音模块兼容处理
+try:
+    import pyttsx3
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 130)
+    HAS_SPEECH = True
+except:
+    HAS_SPEECH = False
+
+
+class CET4Simulator(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("大学英语四级学习仿真综合工具【完整版】")
+        self.geometry("1200x750")
+        self.resizable(False, False)
+
+        # 顶部标题
+        tk.Label(self, text="英语四级备考仿真综合展示系统",
+                 font=("微软雅黑", 16, "bold"), fg="#1a56db").pack(pady=8)
+
+        # 学习数据全局记录
+        self.study_data = {
+            "vocab_mastered": {},  # 字典：单词:学习日期，用于艾宾浩斯
+            "vocab_total": 0,
+            "reading_score": [],
+            "listening_score": [],
+            "exam_scores": [],
+            "study_days": 0
+        }
+
+        # 多标签页
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill="both", expand=True, padx=15, pady=5)
+
+        # 8大功能模块
+        self.build_vocab_page()       # 1.高频词汇速记
+        self.build_review_page()      # ✅新增：艾宾浩斯单词复习
+        self.build_listening_page()   # 2.听力仿真训练
+        self.build_reading_page()     # 3.阅读模考训练
+        self.build_exam_page()        # ✅新增：真题套卷模考
+        self.build_writing_page()     # 4.写作模板助手
+        self.build_plan_page()        # 5.学习计划生成
+        self.build_analysis_page()    # 6.学习数据可视化
+
+    # ===================== 1. 高频词汇速记模块 =====================
+    def build_vocab_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="高频词汇速记")
+
+        # 四级核心高频词库（含财会专业相关词）
+        self.vocab_list = [
+            ("abandon", "v. 放弃，抛弃"), ("absorb", "v. 吸收；吸引"), ("academic", "adj. 学术的"),
+            ("accelerate", "v. 加速"), ("accomplish", "v. 完成，实现"), ("account", "n. 账户；解释 v. 解释"),
+            ("accumulate", "v. 积累"), ("accurate", "adj. 准确的"), ("acquire", "v. 获得，习得"),
+            ("adapt", "v. 适应，改编"), ("adequate", "adj. 充足的"), ("adjust", "v. 调整，调节"),
+            ("administration", "n. 管理，行政"), ("advantage", "n. 优势，好处"), ("aggressive", "adj. 侵略的；积极的"),
+            ("analyze", "v. 分析"), ("annual", "adj. 每年的"), ("approach", "v. 接近 n. 方法"),
+            ("appropriate", "adj. 适当的"), ("argument", "n. 争论，论点"), ("arise", "v. 出现，产生"),
+            ("assess", "v. 评估，评价"), ("asset", "n. 资产，财产"), ("assign", "v. 分配，指派"),
+            ("assume", "v. 假定，承担"), ("atmosphere", "n. 气氛；大气"), ("attain", "v. 获得，达到"),
+            ("attribute", "v. 归因于 n. 属性"), ("balance", "n. 平衡；余额 v. 平衡"), ("barrier", "n. 障碍"),
+            ("budget", "n. 预算 v. 做预算"), ("capital", "n. 资本，资金 adj. 首都的"), ("career", "n. 职业"),
+            ("challenge", "n./v. 挑战"), ("circumstance", "n. 情况，环境"), ("commercial", "adj. 商业的"),
+            ("commit", "v. 承诺；犯罪"), ("compensate", "v. 补偿，赔偿"), ("competitive", "adj. 有竞争力的"),
+            ("concentrate", "v. 集中，专心"), ("consequence", "n. 结果，后果"), ("conservative", "adj. 保守的"),
+            ("considerable", "adj. 相当大的"), ("consist", "v. 由…组成"), ("constant", "adj. 不断的，恒定的"),
+            ("consult", "v. 咨询，查阅"), ("contribute", "v. 贡献，捐献"), ("convince", "v. 说服，使确信"),
+            ("corporate", "adj. 公司的，法人的"), ("cost", "n. 成本，花费"), ("credit", "n. 信用；学分"),
+            ("critical", "adj. 批评的；关键的"), ("decline", "v./n. 下降；拒绝"), ("deficit", "n. 赤字，亏损"),
+            ("define", "v. 定义，规定"), ("demonstrate", "v. 证明，展示"), ("deposit", "n./v. 存款；押金"),
+            ("derive", "v. 源自，获得"), ("despite", "prep. 尽管"), ("dimension", "n. 维度，方面"),
+            ("discipline", "n. 学科；纪律"), ("distinguish", "v. 区分，辨别"), ("diverse", "adj. 多样的"),
+            ("economic", "adj. 经济的"), ("efficiency", "n. 效率"), ("eliminate", "v. 消除，排除"),
+            ("emphasize", "v. 强调"), ("enable", "v. 使能够"), ("establish", "v. 建立，设立"),
+            ("estimate", "v./n. 估计，估算"), ("evaluate", "v. 评价，评估"), ("exceed", "v. 超过，超出"),
+            ("exchange", "v./n. 交换；汇率"), ("expand", "v. 扩张，膨胀"), ("expense", "n. 花费，开支"),
+            ("exploit", "v. 开发，利用"), ("export", "v./n. 出口"), ("exposure", "n. 暴露；曝光"),
+            ("facility", "n. 设施，设备"), ("factor", "n. 因素"), ("finance", "n. 金融，财政 v. 融资"),
+            ("fluctuate", "v. 波动，起伏"), ("forecast", "v./n. 预测"), ("foundation", "n. 基础；基金会"),
+            ("function", "n. 功能 v. 起作用"), ("fund", "n. 资金，基金 v. 资助"), ("generate", "v. 产生，生成"),
+            ("global", "adj. 全球的"), ("guarantee", "v./n. 保证"), ("implement", "v. 实施，执行"),
+            ("implication", "n. 含义，暗示"), ("income", "n. 收入，收益"), ("index", "n. 指数；索引"),
+            ("indicate", "v. 表明，指示"), ("individual", "adj. 个人的 n. 个人"), ("inflation", "n. 通货膨胀"),
+            ("influence", "n./v. 影响"), ("institute", "n. 学院，协会"), ("intend", "v. 打算，计划"),
+            ("invest", "v. 投资"), ("involve", "v. 涉及，包含"), ("issue", "n. 问题；发行 v. 发行"),
+            ("liability", "n. 责任；负债"), ("maintain", "v. 维持，保持"), ("major", "adj. 主要的 n. 专业"),
+            ("manage", "v. 管理，经营"), ("margin", "n. 利润；边缘"), ("market", "n. 市场"),
+            ("measure", "v. 测量 n. 措施"), ("media", "n. 媒体"), ("mental", "adj. 精神的，脑力的"),
+            ("method", "n. 方法"), ("modify", "v. 修改，更改"), ("monitor", "v. 监控 n. 显示器"),
+            ("negative", "adj. 消极的；负面的"), ("negotiate", "v. 谈判，协商"), ("objective", "n. 目标 adj. 客观的"),
+            ("obtain", "v. 获得，得到"), ("operate", "v. 操作，运营"), ("opportunity", "n. 机会"),
+            ("option", "n. 选择；期权"), ("order", "n. 订单；顺序 v. 命令"), ("organize", "v. 组织"),
+            ("output", "n. 产出，输出"), ("overall", "adj. 全部的，总体的"), ("overcome", "v. 克服"),
+            ("participate", "v. 参与"), ("particular", "adj. 特定的，特别的"), ("pattern", "n. 模式，图案"),
+            ("payment", "n. 付款，支付"), ("percent", "n. 百分比"), ("performance", "n. 表现，绩效"),
+            ("policy", "n. 政策，方针"), ("positive", "adj. 积极的；正面的"), ("potential", "adj. 潜在的 n. 潜力"),
+            ("predict", "v. 预测，预言"), ("previous", "adj. 以前的"), ("primary", "adj. 主要的，初级的"),
+            ("priority", "n. 优先事项"), ("procedure", "n. 程序，步骤"), ("process", "n. 过程 v. 处理"),
+            ("profit", "n. 利润 v. 获利"), ("promote", "v. 促进；提升"), ("property", "n. 财产，属性"),
+            ("proportion", "n. 比例"), ("prospect", "n. 前景，展望"), ("purchase", "v./n. 购买"),
+            ("pursue", "v. 追求，从事"), ("random", "adj. 随机的"), ("range", "n. 范围 v. 变动"),
+            ("rate", "n. 比率；速度 v. 评价"), ("reaction", "n. 反应"), ("realize", "v. 实现；意识到"),
+            ("recommend", "v. 推荐"), ("record", "n./v. 记录"), ("reduce", "v. 减少，降低"),
+            ("refer", "v. 参考，涉及"), ("reflect", "v. 反映，反射"), ("reform", "v./n. 改革"),
+            ("regard", "v. 认为，看作"), ("region", "n. 地区，区域"), ("regulate", "v. 调节，规定"),
+            ("related", "adj. 相关的"), ("release", "v./n. 释放；发布"), ("relevant", "adj. 相关的，切题的"),
+            ("reliability", "n. 可靠性"), ("require", "v. 需要，要求"), ("research", "n./v. 研究"),
+            ("reserve", "v./n. 储备；预订"), ("resource", "n. 资源"), ("respond", "v. 回应，反应"),
+            ("responsibility", "n. 责任"), ("revenue", "n. 收入，税收"), ("risk", "n. 风险 v. 冒险"),
+            ("role", "n. 角色，作用"), ("scene", "n. 场景，场面"), ("schedule", "n. 时间表 v. 安排"),
+            ("sector", "n. 部门，行业"), ("security", "n. 安全；证券"), ("select", "v. 选择"),
+            ("senior", "adj. 高级的，年长的"), ("sense", "n. 感觉，意识"), ("series", "n. 系列，连续"),
+            ("serve", "v. 服务，接待"), ("session", "n. 会议；学期"), ("set", "v. 设置 n. 一套"),
+            ("significance", "n. 意义，重要性"), ("similar", "adj. 相似的"), ("site", "n. 地点，场所"),
+            ("solution", "n. 解决方案；溶液"), ("solve", "v. 解决"), ("source", "n. 来源，源头"),
+            ("specific", "adj. 具体的，特定的"), ("speculate", "v. 推测；投机"), ("stable", "adj. 稳定的"),
+            ("standard", "n. 标准 adj. 标准的"), ("statement", "n. 陈述；报表"), ("strategy", "n. 战略，策略"),
+            ("structure", "n. 结构 v. 构建"), ("style", "n. 风格，方式"), ("submit", "v. 提交，服从"),
+            ("substitute", "v./n. 替代"), ("succeed", "v. 成功；继承"), ("sufficient", "adj. 足够的"),
+            ("sum", "n. 总和 v. 总结"), ("supply", "v./n. 供应"), ("support", "v./n. 支持，支撑"),
+            ("sustain", "v. 维持，支撑"), ("target", "n. 目标 v. 瞄准"), ("task", "n. 任务"),
+            ("technical", "adj. 技术的"), ("technology", "n. 技术"), ("tend", "v. 倾向于；照料"),
+            ("term", "n. 术语；学期；条款"), ("theory", "n. 理论"), ("therefore", "adv. 因此"),
+            ("threat", "n. 威胁"), ("trace", "v. 追踪 n. 痕迹"), ("trade", "n./v. 贸易，交易"),
+            ("transfer", "v./n. 转移；转让"), ("trend", "n. 趋势，倾向"), ("ultimate", "adj. 最终的"),
+            ("undergo", "v. 经历，遭受"), ("unique", "adj. 独特的"), ("value", "n. 价值 v. 估价"),
+            ("vary", "v. 变化，不同"), ("venture", "n. 风险企业 v. 冒险"), ("version", "n. 版本"),
+            ("via", "prep. 通过，经由"), ("virtual", "adj. 虚拟的"), ("volume", "n. 量；体积"),
+            ("welfare", "n. 福利"), ("whereas", "conj. 然而"), ("widespread", "adj. 广泛的"),
+            ("withdraw", "v. 撤回；取款"), ("workforce", "n. 劳动力"), ("yield", "v. 产出 n. 产量；收益")
+        ]
+        self.vocab_total = len(self.vocab_list)
+        self.current_word = None
+
+        # 左侧操作区
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="四级核心高频词汇", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+
+        self.word_label = tk.Label(left, text="点击开始背单词", font=("微软雅黑", 18, "bold"), fg="#1a56db")
+        self.word_label.pack(pady=15)
+
+        self.meaning_label = tk.Label(left, text="", font=("微软雅黑", 12), wraplength=200)
+        self.meaning_label.pack(pady=5)
+
+        btn_row = tk.Frame(left)
+        btn_row.pack(pady=15)
+        tk.Button(btn_row, text="下一个", command=self.next_word, width=10, bg="#1a56db", fg="white").pack(side="left", padx=3)
+        tk.Button(btn_row, text="看释义", command=self.show_meaning, width=10, bg="#0a8f4a", fg="white").pack(side="left", padx=3)
+        
+        tk.Button(left, text="标记已掌握", command=self.mark_mastered, width=22, bg="#b45309", fg="white").pack(pady=5)
+        
+        if HAS_SPEECH:
+            tk.Button(left, text="🔊 朗读单词", command=self.speak_word, width=22, bg="#7c3aed", fg="white").pack(pady=5)
+
+        self.vocab_progress = tk.Label(left, text=f"进度: 0 / {self.vocab_total}", font=("微软雅黑", 10))
+        self.vocab_progress.pack(pady=15)
+
+        # 右侧词汇掌握度图表
+        self.vocab_fig = plt.Figure(figsize=(6, 5), dpi=100)
+        self.vocab_canvas = FigureCanvasTkAgg(self.vocab_fig, master=page)
+        self.vocab_canvas.get_tk_widget().pack(side="right", padx=10, pady=10)
+        self.update_vocab_chart()
+
+    def next_word(self):
+        remaining = [w for w in self.vocab_list if w[0] not in self.study_data["vocab_mastered"]]
+        if not remaining:
+            messagebox.showinfo("完成", "恭喜！你已掌握全部核心词汇！")
+            return
+        self.current_word = random.choice(remaining)
+        self.word_label.config(text=self.current_word[0])
+        self.meaning_label.config(text="???")
+
+    def show_meaning(self):
+        if self.current_word:
+            self.meaning_label.config(text=self.current_word[1])
+
+    def mark_mastered(self):
+        if self.current_word and self.current_word[0] not in self.study_data["vocab_mastered"]:
+            # 记录学习日期，用于艾宾浩斯
+            self.study_data["vocab_mastered"][self.current_word[0]] = datetime.now().date()
+            mastered_count = len(self.study_data["vocab_mastered"])
+            self.vocab_progress.config(text=f"进度: {mastered_count} / {self.vocab_total}")
+            self.update_vocab_chart()
+            self.next_word()
+
+    def speak_word(self):
+        if self.current_word and HAS_SPEECH:
+            engine.say(self.current_word[0])
+            engine.runAndWait()
+
+    def update_vocab_chart(self):
+        self.vocab_fig.clear()
+        ax = self.vocab_fig.add_subplot(111)
+        mastered = len(self.study_data["vocab_mastered"])
+        remaining = self.vocab_total - mastered
+        ax.pie([mastered, remaining], labels=["已掌握", "未学习"],
+               autopct="%1.1f%%", colors=["#10b981", "#e5e7eb"], startangle=90)
+        ax.set_title("词汇掌握度进度")
+        self.vocab_canvas.draw()
+
+    # ===================== ✅新增：艾宾浩斯单词复习模块 =====================
+    def build_review_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="艾宾浩斯复习")
+
+        # 艾宾浩斯复习间隔（天）
+        self.review_intervals = [1, 2, 4, 7, 15]
+
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="艾宾浩斯遗忘曲线复习", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+
+        self.today_review_label = tk.Label(left, text="今日待复习单词", font=("微软雅黑", 11, "bold"), fg="#d92d20")
+        self.today_review_label.pack(anchor="w", pady=5)
+
+        self.review_listbox = tk.Listbox(left, width=30, height=15, font=("微软雅黑", 10))
+        self.review_listbox.pack(pady=5)
+
+        btn_row = tk.Frame(left)
+        btn_row.pack(pady=10)
+        tk.Button(btn_row, text="刷新复习列表", command=self.refresh_review, width=12, bg="#1a56db", fg="white").pack(side="left", padx=3)
+        tk.Button(btn_row, text="标记已复习", command=self.mark_reviewed, width=12, bg="#0a8f4a", fg="white").pack(side="left", padx=3)
+
+        self.review_stats = tk.Label(left, text="", font=("微软雅黑", 10), fg="#666")
+        self.review_stats.pack(pady=10)
+
+        # 右侧遗忘曲线图
+        self.review_fig = plt.Figure(figsize=(6, 5), dpi=100)
+        self.review_canvas = FigureCanvasTkAgg(self.review_fig, master=page)
+        self.review_canvas.get_tk_widget().pack(side="right", padx=10, pady=10)
+        
+        self.today_review_words = []
+        self.refresh_review()
+        self.draw_forgetting_curve()
+
+    def refresh_review(self):
+        today = datetime.now().date()
+        self.today_review_words = []
+
+        for word, learn_date in self.study_data["vocab_mastered"].items():
+            days_passed = (today - learn_date).days
+            # 判断是否在复习节点
+            for interval in self.review_intervals:
+                if days_passed == interval:
+                    self.today_review_words.append((word, f"第{interval}天复习"))
+                    break
+
+        self.review_listbox.delete(0, tk.END)
+        for word, tip in self.today_review_words:
+            self.review_listbox.insert(tk.END, f"{word}  -  {tip}")
+
+        self.review_stats.config(text=f"今日待复习：{len(self.today_review_words)} 个单词")
+
+    def mark_reviewed(self):
+        sel = self.review_listbox.curselection()
+        if not sel:
+            messagebox.showwarning("提示", "请先选择要标记的单词！")
+            return
+        idx = sel[0]
+        self.review_listbox.delete(idx)
+        self.today_review_words.pop(idx)
+        self.review_stats.config(text=f"今日待复习：{len(self.today_review_words)} 个单词")
+
+    def draw_forgetting_curve(self):
+        self.review_fig.clear()
+        ax = self.review_fig.add_subplot(111)
+        days = np.arange(0, 30, 0.5)
+        # 艾宾浩斯遗忘曲线公式：记忆留存率 = 100 * 1.84 / (1 + 1.25 * x^0.8)
+        retention = 100 * 1.84 / (1 + 1.25 * (days ** 0.8))
+
+        ax.plot(days, retention, color="#1a56db", linewidth=2, label="记忆留存率")
+        
+        # 标记复习节点
+        for d in self.review_intervals:
+            r = 100 * 1.84 / (1 + 1.25 * (d ** 0.8))
+            ax.scatter(d, r, color="#ef4444", s=60, zorder=5)
+            ax.text(d+0.5, r+2, f"第{d}天", fontsize=9)
+
+        ax.set_xlabel("天数")
+        ax.set_ylabel("记忆留存率(%)")
+        ax.set_title("艾宾浩斯遗忘曲线 & 复习节点")
+        ax.legend()
+        ax.grid(alpha=0.3)
+        self.review_canvas.draw()
+
+    # ===================== 2. 听力仿真训练模块 =====================
+    def build_listening_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="听力仿真训练")
+
+        # 内置听力材料
+        self.listening_materials = [
+            {
+                "type": "短对话",
+                "question": "What does the woman mean?",
+                "options": ["A. She agrees with the man", "B. She thinks the man is wrong",
+                            "C. She has no idea", "D. She will not go"],
+                "answer": "A",
+                "script": """M: The lecture this morning is so interesting.
+W: I couldn't agree more. It's far better than the last one."""
+            },
+            {
+                "type": "短对话",
+                "question": "What is the man's job?",
+                "options": ["A. Teacher", "B. Doctor", "C. Accountant", "D. Engineer"],
+                "answer": "C",
+                "script": """W: I need to file my tax return this week.
+M: Don't worry, I'll sort out all your financial statements and calculate the tax."""
+            },
+            {
+                "type": "长对话",
+                "question": "Why does the woman come to the bank?",
+                "options": ["A. To open an account", "B. To apply for a loan",
+                            "C. To deposit money", "D. To check her balance"],
+                "answer": "B",
+                "script": """M: Good morning, how can I help you today?
+W: Good morning. I'd like to talk about applying for a small business loan.
+M: Certainly. Please have a seat. Can you tell me about your business plan?
+W: Sure. I run a small accounting firm and I need funds to expand my office."""
+            }
+        ]
+        self.current_listen = 0
+        self.show_script = False
+
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="听力仿真训练", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+
+        self.listen_type = tk.Label(left, text="", font=("微软雅黑", 10), fg="#666")
+        self.listen_type.pack(anchor="w")
+
+        self.listen_question = tk.Label(left, text="", font=("微软雅黑", 11, "bold"), wraplength=250, justify="left")
+        self.listen_question.pack(pady=10, anchor="w")
+
+        self.option_var = tk.StringVar()
+        self.option_btns = []
+        for i in range(4):
+            rb = tk.Radiobutton(left, text="", variable=self.option_var, value=chr(65+i), anchor="w")
+            rb.pack(fill="x", pady=2)
+            self.option_btns.append(rb)
+
+        btn_row = tk.Frame(left)
+        btn_row.pack(pady=15)
+        tk.Button(btn_row, text="提交答案", command=self.check_listen, width=10, bg="#0a8f4a", fg="white").pack(side="left", padx=3)
+        tk.Button(btn_row, text="下一题", command=self.next_listen, width=10, bg="#1a56db", fg="white").pack(side="left", padx=3)
+
+        if HAS_SPEECH:
+            tk.Button(left, text="🔊 播放原文", command=self.speak_script, width=22, bg="#7c3aed", fg="white").pack(pady=5)
+        
+        tk.Button(left, text="显示/隐藏原文", command=self.toggle_script, width=22, bg="#b45309", fg="white").pack(pady=5)
+
+        self.listen_result = tk.Label(left, text="", font=("微软雅黑", 11), fg="#d92d20")
+        self.listen_result.pack(pady=10)
+
+        self.script_text = tk.Text(left, width=35, height=8, font=("微软雅黑", 10))
+        self.script_text.pack(pady=5)
+
+        # 右侧正确率图表
+        self.listen_fig = plt.Figure(figsize=(6, 5), dpi=100)
+        self.listen_canvas = FigureCanvasTkAgg(self.listen_fig, master=page)
+        self.listen_canvas.get_tk_widget().pack(side="right", padx=10, pady=10)
+        
+        self.listen_correct = 0
+        self.listen_total = 0
+        self.update_listen_chart()
+        self.load_listen()
+
+    def load_listen(self):
+        item = self.listening_materials[self.current_listen]
+        self.listen_type.config(text=item["type"])
+        self.listen_question.config(text=item["question"])
+        for i, opt in enumerate(item["options"]):
+            self.option_btns[i].config(text=opt)
+        self.option_var.set("")
+        self.listen_result.config(text="")
+        self.script_text.delete("1.0", "end")
+        if self.show_script:
+            self.script_text.insert("end", item["script"])
+
+    def check_listen(self):
+        if not self.option_var.get():
+            messagebox.showwarning("提示", "请先选择一个选项！")
+            return
+        self.listen_total += 1
+        item = self.listening_materials[self.current_listen]
+        if self.option_var.get() == item["answer"]:
+            self.listen_correct += 1
+            self.listen_result.config(text="✅ 回答正确！", fg="#0a8f4a")
+        else:
+            self.listen_result.config(text=f"❌ 正确答案：{item['answer']}", fg="#d92d20")
+        self.update_listen_chart()
+
+    def next_listen(self):
+        self.current_listen = (self.current_listen + 1) % len(self.listening_materials)
+        self.load_listen()
+
+    def toggle_script(self):
+        self.show_script = not self.show_script
+        if self.show_script:
+            self.script_text.insert("end", self.listening_materials[self.current_listen]["script"])
+        else:
+            self.script_text.delete("1.0", "end")
+
+    def speak_script(self):
+        if HAS_SPEECH:
+            engine.say(self.listening_materials[self.current_listen]["script"])
+            engine.runAndWait()
+
+    def update_listen_chart(self):
+        self.listen_fig.clear()
+        ax = self.listen_fig.add_subplot(111)
+        if self.listen_total == 0:
+            rate = 0
+        else:
+            rate = self.listen_correct / self.listen_total * 100
+        bars = ax.bar(["正确", "错误"], [self.listen_correct, self.listen_total - self.listen_correct],
+                      color=["#10b981", "#ef4444"], width=0.5)
+        for bar, val in zip(bars, [self.listen_correct, self.listen_total - self.listen_correct]):
+            ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.1, str(val), ha="center")
+        ax.set_title(f"听力正确率：{rate:.1f}%")
+        ax.set_ylabel("题目数量")
+        ax.grid(axis="y", alpha=0.3)
+        self.listen_canvas.draw()
+
+    # ===================== 3. 阅读模考训练模块 =====================
+    def build_reading_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="阅读模考训练")
+
+        # 内置阅读真题（仔细阅读）
+        self.reading_passages = [
+            {
+                "title": "Passage 1 财务教育重要性",
+                "text": """Financial literacy is the ability to understand and effectively use various financial skills, 
+including personal financial management, budgeting, and investing. Many people struggle with debt 
+because they lack basic financial knowledge. Studies show that individuals with higher financial 
+literacy are more likely to save for retirement, manage debt effectively, and make informed investment 
+decisions. 
+
+Schools have begun to introduce financial education courses to help students build good money habits 
+early. However, critics argue that many courses are too theoretical and fail to teach practical skills 
+like balancing a checkbook, understanding credit scores, or creating a monthly budget. 
+
+Accounting majors often have an advantage in financial literacy because their coursework covers 
+many of these topics. They can apply their classroom knowledge to real-life financial situations, 
+making them better prepared for career and personal finance challenges.""",
+                "questions": [
+                    {
+                        "q": "What is financial literacy according to the passage?",
+                        "options": ["A. The ability to earn more money", "B. The ability to understand and use financial skills",
+                                    "C. The ability to pass accounting exams", "D. The ability to predict market trends"],
+                        "answer": "B"
+                    },
+                    {
+                        "q": "Why do many people struggle with debt?",
+                        "options": ["A. They earn too little money", "B. They lack basic financial knowledge",
+                                    "C. They spend too much on education", "D. They invest in risky projects"],
+                        "answer": "B"
+                    },
+                    {
+                        "q": "What do critics say about school financial courses?",
+                        "options": ["A. They are too expensive", "B. They are too practical",
+                                    "C. They are too theoretical", "D. They are too short"],
+                        "answer": "C"
+                    },
+                    {
+                        "q": "Why do accounting majors have an advantage?",
+                        "options": ["A. They have higher IQ", "B. Their coursework covers financial topics",
+                                    "C. They work part-time at banks", "D. They inherit more money"],
+                        "answer": "B"
+                    },
+                    {
+                        "q": "What is the main idea of the passage?",
+                        "options": ["A. Financial literacy is important and needs practical education",
+                                    "B. Accounting majors are smarter than others",
+                                    "C. School education is useless",
+                                    "D. Debt is a serious social problem"],
+                        "answer": "A"
+                    }
+                ]
+            }
+        ]
+        self.current_read = 0
+        self.read_answers = {}
+
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="仔细阅读模考", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,5))
+        self.read_title = tk.Label(left, text="", font=("微软雅黑", 11, "bold"), fg="#1a56db")
+        self.read_title.pack(anchor="w")
+
+        self.read_text = tk.Text(left, width=40, height=18, font=("微软雅黑", 10), wrap="word")
+        self.read_text.pack(pady=5)
+
+        # 题目区
+        self.question_frame = tk.Frame(left)
+        self.question_frame.pack(fill="x", pady=5)
+        self.q_label = tk.Label(self.question_frame, text="", font=("微软雅黑", 10, "bold"), wraplength=300, justify="left")
+        self.q_label.pack(anchor="w")
+        
+        self.read_var = tk.StringVar()
+        self.read_opts = []
+        for i in range(4):
+            rb = tk.Radiobutton(self.question_frame, text="", variable=self.read_var, value=chr(65+i), anchor="w")
+            rb.pack(fill="x")
+            self.read_opts.append(rb)
+
+        btn_row = tk.Frame(left)
+        btn_row.pack(pady=10)
+        tk.Button(btn_row, text="提交本题", command=self.check_read, width=10, bg="#0a8f4a", fg="white").pack(side="left", padx=3)
+        tk.Button(btn_row, text="下一题", command=self.next_question, width=10, bg="#1a56db", fg="white").pack(side="left", padx=3)
+
+        self.read_result = tk.Label(left, text="", font=("微软雅黑", 10), fg="#d92d20")
+        self.read_result.pack(pady=5)
+
+        # 右侧得分统计
+        self.read_fig = plt.Figure(figsize=(5, 5), dpi=100)
+        self.read_canvas = FigureCanvasTkAgg(self.read_fig, master=page)
+        self.read_canvas.get_tk_widget().pack(side="right", padx=10, pady=10)
+        
+        self.read_correct = 0
+        self.read_total = 0
+        self.q_index = 0
+        self.load_reading()
+        self.update_read_chart()
+
+    def load_reading(self):
+        passage = self.reading_passages[self.current_read]
+        self.read_title.config(text=passage["title"])
+        self.read_text.delete("1.0", "end")
+        self.read_text.insert("end", passage["text"])
+        self.q_index = 0
+        self.load_question()
+
+    def load_question(self):
+        q = self.reading_passages[self.current_read]["questions"][self.q_index]
+        self.q_label.config(text=f"第{self.q_index+1}题：{q['q']}")
+        for i, opt in enumerate(q["options"]):
+            self.read_opts[i].config(text=opt)
+        self.read_var.set("")
+        self.read_result.config(text="")
+
+    def check_read(self):
+        if not self.read_var.get():
+            messagebox.showwarning("提示", "请先选择答案！")
+            return
+        self.read_total += 1
+        q = self.reading_passages[self.current_read]["questions"][self.q_index]
+        if self.read_var.get() == q["answer"]:
+            self.read_correct += 1
+            self.read_result.config(text="✅ 正确", fg="#0a8f4a")
+        else:
+            self.read_result.config(text=f"❌ 正确答案：{q['answer']}", fg="#d92d20")
+        self.update_read_chart()
+
+    def next_question(self):
+        total_q = len(self.reading_passages[self.current_read]["questions"])
+        if self.q_index < total_q - 1:
+            self.q_index += 1
+            self.load_question()
+        else:
+            score = self.read_correct / self.read_total * 100 if self.read_total > 0 else 0
+            messagebox.showinfo("完成", f"本篇阅读完成！\n正确率：{score:.1f}%\n答对 {self.read_correct}/{self.read_total} 题")
+
+    def update_read_chart(self):
+        self.read_fig.clear()
+        ax = self.read_fig.add_subplot(111)
+        rate = self.read_correct / self.read_total * 100 if self.read_total > 0 else 0
+        ax.pie([self.read_correct, self.read_total - self.read_correct],
+               labels=["正确", "错误"], autopct="%1.1f%%",
+               colors=["#10b981", "#ef4444"], startangle=90)
+        ax.set_title(f"阅读正确率：{rate:.1f}%")
+        self.read_canvas.draw()
+
+    # ===================== ✅新增：真题套卷模考模块 =====================
+    def build_exam_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="真题套卷模考")
+
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="四级真题模拟套卷", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+        tk.Label(left, text="满分710分，及格线425分", font=("微软雅黑", 10), fg="#666").pack(anchor="w")
+
+        # 三个部分题目
+        self.exam_data = {
+            "听力": {
+                "total": 10,
+                "score": 248.5,
+                "questions": [
+                    {"q": "1. What does the woman imply?", "options": ["A. She will go to the party", "B. She has to work", "C. She dislikes parties", "D. She is ill"], "answer": "B"},
+                    {"q": "2. Where does the conversation probably take place?", "options": ["A. In a bank", "B. In a restaurant", "C. In an office", "D. In a hospital"], "answer": "A"},
+                    {"q": "3. What is the man's problem?", "options": ["A. He lost his job", "B. He missed the deadline", "C. He failed the exam", "D. He ran out of money"], "answer": "B"},
+                    {"q": "4. What does the man suggest the woman do?", "options": ["A. Buy a new computer", "B. Ask for help", "C. Take a rest", "D. Start over"], "answer": "B"},
+                    {"q": "5. How much will the woman pay?", "options": ["A. $10", "B. $15", "C. $20", "D. $25"], "answer": "B"},
+                    {"q": "6. What are the speakers talking about?", "options": ["A. A job interview", "B. A travel plan", "C. A new movie", "D. A financial report"], "answer": "A"},
+                    {"q": "7. When will the meeting start?", "options": ["A. 9:00", "B. 9:30", "C. 10:00", "D. 10:30"], "answer": "C"},
+                    {"q": "8. Why does the man call?", "options": ["A. To book a room", "B. To cancel an order", "C. To ask for directions", "D. To make an appointment"], "answer": "D"},
+                    {"q": "9. What does the woman think of the plan?", "options": ["A. Perfect", "B. Impractical", "C. Just so-so", "D. Too expensive"], "answer": "B"},
+                    {"q": "10. What will the man do next?", "options": ["A. Sign the contract", "B. Read the document", "C. Call his boss", "D. Leave the office"], "answer": "B"},
+                ]
+            },
+            "阅读": {
+                "total": 10,
+                "score": 248.5,
+                "questions": [
+                    {"q": "11. The word \"literacy\" in paragraph 1 is closest in meaning to:", "options": ["A. ability to read and write", "B. knowledge and skill", "C. speed of learning", "D. interest in study"], "answer": "B"},
+                    {"q": "12. According to the passage, financial education courses in schools:", "options": ["A. are very practical", "B. are highly praised", "C. lack practical skills", "D. are popular with students"], "answer": "C"},
+                    {"q": "13. Accounting majors have an advantage because:", "options": ["A. they are smarter", "B. they learn more about finance", "C. they have more work experience", "D. they earn more money"], "answer": "B"},
+                    {"q": "14. What is the author's attitude towards financial literacy?", "options": ["A. Negative", "B. Positive", "C. Neutral", "D. Doubtful"], "answer": "B"},
+                    {"q": "15. The passage is mainly about:", "options": ["A. how to manage money", "B. the importance of financial education", "C. accounting majors' advantages", "D. school education reform"], "answer": "B"},
+                    {"q": "16. According to the passage, inflation refers to:", "options": ["A. rising prices", "B. falling employment", "C. increasing income", "D. growing economy"], "answer": "A"},
+                    {"q": "17. Who suffers most from inflation?", "options": ["A. Businessmen", "B. Investors", "C. Fixed-income people", "D. Bankers"], "answer": "C"},
+                    {"q": "18. The word \"curb\" in paragraph 3 is closest in meaning to:", "options": ["A. control", "B. cause", "C. predict", "D. explain"], "answer": "A"},
+                    {"q": "19. What can we infer from the passage?", "options": ["A. Inflation is always bad", "B. Government can do nothing about inflation", "C. Proper inflation may boost economy", "D. Inflation only affects poor people"], "answer": "C"},
+                    {"q": "20. The best title for the passage would be:", "options": ["A. Inflation and Its Impacts", "B. How to Fight Inflation", "C. Financial Crisis", "D. Economic Development"], "answer": "A"},
+                ]
+            },
+            "写作翻译": {
+                "total": 1,
+                "score": 213,
+                "questions": [
+                    {"q": "写作题：For this part, you are allowed 30 minutes to write a short essay on the topic of \"The Importance of Financial Literacy\". You should write at least 120 words.",
+                     "options": ["A. 优秀(180-213)", "B. 良好(150-179)", "C. 及格(120-149)", "D. 不及格(<120)"], "answer": "B"}
+                ]
+            }
+        }
+
+        self.exam_answers = {}
+        self.current_section = "听力"
+        self.current_q = 0
+
+        # 题型切换
+        section_row = tk.Frame(left)
+        section_row.pack(fill="x", pady=5)
+        tk.Button(section_row, text="听力部分", command=lambda: self.load_section("听力"), width=8).pack(side="left", padx=2)
+        tk.Button(section_row, text="阅读部分", command=lambda: self.load_section("阅读"), width=8).pack(side="left", padx=2)
+        tk.Button(section_row, text="写作翻译", command=lambda: self.load_section("写作翻译"), width=8).pack(side="left", padx=2)
+
+        # 题目区
+        self.exam_q_label = tk.Label(left, text="", font=("微软雅黑", 10, "bold"), wraplength=300, justify="left")
+        self.exam_q_label.pack(anchor="w", pady=10)
+
+        self.exam_var = tk.StringVar()
+        self.exam_opts = []
+        for i in range(4):
+            rb = tk.Radiobutton(left, text="", variable=self.exam_var, value=chr(65+i), anchor="w")
+            rb.pack(fill="x", pady=2)
+            self.exam_opts.append(rb)
+
+        btn_row = tk.Frame(left)
+        btn_row.pack(pady=10)
+        tk.Button(btn_row, text="上一题", command=self.prev_exam_q, width=8).pack(side="left", padx=2)
+        tk.Button(btn_row, text="下一题", command=self.next_exam_q, width=8).pack(side="left", padx=2)
+
+        tk.Button(left, text="交卷并算分", command=self.submit_exam, width=20, bg="#d92d20", fg="white").pack(pady=15)
+
+        self.exam_result = tk.Label(left, text="", font=("微软雅黑", 11, "bold"), fg="#1a56db")
+        self.exam_result.pack(pady=10)
+
+        # 右侧得分分布图
+        self.exam_fig = plt.Figure(figsize=(6, 5), dpi=100)
+        self.exam_canvas = FigureCanvasTkAgg(self.exam_fig, master=page)
+        self.exam_canvas.get_tk_widget().pack(side="right", padx=10, pady=10)
+        self.load_section("听力")
+        self.draw_exam_chart(0, 0, 0)
+
+    def load_section(self, section):
+        self.current_section = section
+        self.current_q = 0
+        self.load_exam_question()
+
+    def load_exam_question(self):
+        q = self.exam_data[self.current_section]["questions"][self.current_q]
+        self.exam_q_label.config(text=q["q"])
+        for i, opt in enumerate(q["options"]):
+            self.exam_opts[i].config(text=opt)
+        # 回显已选答案
+        key = f"{self.current_section}_{self.current_q}"
+        if key in self.exam_answers:
+            self.exam_var.set(self.exam_answers[key])
+        else:
+            self.exam_var.set("")
+
+    def save_answer(self):
+        if self.exam_var.get():
+            key = f"{self.current_section}_{self.current_q}"
+            self.exam_answers[key] = self.exam_var.get()
+
+    def prev_exam_q(self):
+        self.save_answer()
+        if self.current_q > 0:
+            self.current_q -= 1
+            self.load_exam_question()
+
+    def next_exam_q(self):
+        self.save_answer()
+        total = self.exam_data[self.current_section]["total"]
+        if self.current_q < total - 1:
+            self.current_q += 1
+            self.load_exam_question()
+        else:
+            messagebox.showinfo("提示", "本部分已完成，可切换其他部分或交卷")
+
+    def submit_exam(self):
+        self.save_answer()
+        listen_correct = 0
+        read_correct = 0
+        write_score = 0
+
+        # 听力算分
+        for i in range(self.exam_data["听力"]["total"]):
+            key = f"听力_{i}"
+            if key in self.exam_answers and self.exam_answers[key] == self.exam_data["听力"]["questions"][i]["answer"]:
+                listen_correct += 1
+        listen_score = listen_correct / self.exam_data["听力"]["total"] * self.exam_data["听力"]["score"]
+
+        # 阅读算分
+        for i in range(self.exam_data["阅读"]["total"]):
+            key = f"阅读_{i}"
+            if key in self.exam_answers and self.exam_answers[key] == self.exam_data["阅读"]["questions"][i]["answer"]:
+                read_correct += 1
+        read_score = read_correct / self.exam_data["阅读"]["total"] * self.exam_data["阅读"]["score"]
+
+        # 写作翻译算分
+        write_ans = self.exam_answers.get("写作翻译_0", "D")
+        score_map = {"A": 190, "B": 160, "C": 130, "D": 90}
+        write_score = score_map.get(write_ans, 90)
+
+        total_score = listen_score + read_score + write_score
+        passed = "✅ 已过线" if total_score >= 425 else "❌ 未过线"
+
+        self.exam_result.config(text=f"总分：{total_score:.1f} 分\n{passed}")
+        self.study_data["exam_scores"].append(total_score)
+        self.draw_exam_chart(listen_score, read_score, write_score)
+
+    def draw_exam_chart(self, listen, read, write):
+        self.exam_fig.clear()
+        ax = self.exam_fig.add_subplot(111)
+        sections = ["听力", "阅读", "写作翻译"]
+        scores = [listen, read, write]
+        colors = ["#3b82f6", "#10b981", "#f59e0b"]
+        bars = ax.bar(sections, scores, color=colors, width=0.6)
+        for bar, val in zip(bars, scores):
+            ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+5, f"{val:.1f}", ha="center")
+        
+        ax.axhline(425/3, ls="--", color="gray", label="单部分及格线")
+        ax.set_ylabel("分数")
+        ax.set_title("四级模考各部分得分")
+        ax.legend()
+        ax.grid(axis="y", alpha=0.3)
+        self.exam_canvas.draw()
+
+    # ===================== 4. 写作模板助手模块 =====================
+    def build_writing_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="写作模板助手")
+
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="四级作文模板库", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+
+        self.template_type = ttk.Combobox(left, values=["现象解释类", "观点对比类", "图表作文", "应用文-书信"], state="readonly", width=20)
+        self.template_type.current(0)
+        self.template_type.pack(pady=5)
+        self.template_type.bind("<<ComboboxSelected>>", self.load_template)
+
+        self.template_text = tk.Text(left, width=38, height=20, font=("微软雅黑", 10))
+        self.template_text.pack(pady=10)
+
+        tk.Button(left, text="统计作文字数", command=self.count_words, width=20, bg="#1a56db", fg="white").pack(pady=5)
+        self.word_count = tk.Label(left, text="字数：0", font=("微软雅黑", 10))
+        self.word_count.pack()
+
+        # 右侧高级替换词
+        right = tk.Frame(page, padx=20, pady=20)
+        right.pack(side="right", fill="both", expand=True)
+
+        tk.Label(right, text="高级词汇替换表", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+
+        replace_list = [
+            ("very", "extraordinarily, remarkably"),
+            ("important", "vital, crucial, significant"),
+            ("many", "numerous, a host of"),
+            ("people", "individuals, citizens"),
+            ("think", "hold the view that, maintain"),
+            ("good", "beneficial, favorable"),
+            ("bad", "detrimental, adverse"),
+            ("big", "enormous, considerable"),
+            ("help", "facilitate, contribute to"),
+            ("use", "utilize, employ"),
+            ("because", "on account that, due to"),
+            ("so", "consequently, therefore"),
+            ("more and more", "an increasing number of"),
+            ("in my opinion", "from my perspective"),
+            ("first", "to begin with, initially"),
+        ]
+        for old, new in replace_list:
+            row = tk.Frame(right)
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text=old, width=15, fg="#666", anchor="w").pack(side="left")
+            tk.Label(row, text="→ " + new, fg="#1a56db", anchor="w").pack(side="left")
+
+        self.load_template()
+
+    def load_template(self, e=None):
+        templates = {
+            "现象解释类": """【现象解释类作文模板】
+
+Nowadays, ______ has become a common phenomenon in our society.
+There are several reasons accounting for this trend.
+
+First and foremost, ______. 
+In addition, ______. 
+Last but not least, ______.
+
+From my perspective, this phenomenon has both positive and negative effects.
+On the one hand, ______. 
+On the other hand, ______.
+
+In conclusion, we should take a rational attitude towards this issue.""",
+
+            "观点对比类": """【观点对比类作文模板】
+
+There is a heated debate about whether ______.
+People's opinions vary from person to person.
+
+Some people hold the view that ______. 
+They argue that ______. 
+
+However, others take the opposite side. 
+They believe that ______. 
+In their opinion, ______.
+
+From where I stand, I am in favor of the former/latter view.
+For one thing, ______. 
+For another, ______.
+
+Taking all these factors into consideration, we may reasonably draw the conclusion that ______.""",
+
+            "图表作文": """【图表作文模板】
+
+As is vividly shown in the chart, ______ has experienced dramatic changes over the past years.
+According to the figures given, ______.
+
+What accounts for this trend? There are mainly three reasons.
+To start with, ______. 
+Furthermore, ______. 
+Besides, ______.
+
+Taking all these into consideration, we can predict that ______.
+And I believe this trend will continue in the foreseeable future.""",
+
+            "应用文-书信": """【书信类作文模板】
+
+Dear Sir/Madam,
+
+I am writing this letter to express my views on ______ / apply for the position of ______.
+
+First of all, ______. 
+In addition, ______. 
+Last but not least, ______.
+
+I would be highly grateful if you could take my suggestions into consideration.
+I am looking forward to your early reply.
+
+Yours sincerely,
+Li Ming"""
+        }
+        key = self.template_type.get()
+        self.template_text.delete("1.0", "end")
+        self.template_text.insert("end", templates[key])
+
+    def count_words(self):
+        text = self.template_text.get("1.0", "end").strip()
+        words = text.split()
+        self.word_count.config(text=f"字数：{len(words)}")
+
+    # ===================== 5. 学习计划生成模块 =====================
+    def build_plan_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="学习计划生成")
+
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="备考计划生成器", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+
+        tk.Label(left, text="距离考试天数：").pack(anchor="w", pady=5)
+        self.days_entry = tk.Entry(left, width=10)
+        self.days_entry.insert(0, "30")
+        self.days_entry.pack(anchor="w")
+
+        tk.Label(left, text="每日学习时长(小时)：").pack(anchor="w", pady=5)
+        self.hours_entry = tk.Entry(left, width=10)
+        self.hours_entry.insert(0, "2")
+        self.hours_entry.pack(anchor="w")
+
+        tk.Label(left, text="薄弱项：").pack(anchor="w", pady=5)
+        self.weak_var = tk.StringVar(value="听力")
+        weak_list = ["听力", "阅读", "写作", "词汇"]
+        for w in weak_list:
+            tk.Radiobutton(left, text=w, variable=self.weak_var, value=w).pack(anchor="w")
+
+        tk.Button(left, text="生成学习计划", command=self.generate_plan, width=18, bg="#1a56db", fg="white").pack(pady=15)
+
+        self.plan_text = tk.Text(left, width=40, height=22, font=("微软雅黑", 10))
+        self.plan_text.pack()
+
+        # 右侧时间分配饼图
+        self.plan_fig = plt.Figure(figsize=(5, 5), dpi=100)
+        self.plan_canvas = FigureCanvasTkAgg(self.plan_fig, master=page)
+        self.plan_canvas.get_tk_widget().pack(side="right", padx=10, pady=10)
+        self.generate_plan()
+
+    def generate_plan(self):
+        try:
+            days = int(self.days_entry.get())
+            hours = float(self.hours_entry.get())
+            weak = self.weak_var.get()
+
+            # 基础时间分配
+            base_time = {
+                "词汇": 0.3,
+                "听力": 0.25,
+                "阅读": 0.25,
+                "写作": 0.2
+            }
+            # 薄弱项加权重
+            base_time[weak] += 0.1
+            total = sum(base_time.values())
+            time_dist = {k: v/total * hours for k, v in base_time.items()}
+
+            plan = f"""【四级备考 {days} 天学习计划】
+每日学习时长：{hours} 小时
+薄弱项强化：{weak}
+
+━━━━━━━━━━━━━━━━
+每日时间分配：
+"""
+            for k, v in time_dist.items():
+                plan += f"  {k}：{v:.1f} 小时\n"
+
+            plan += f"""
+━━━━━━━━━━━━━━━━
+阶段规划：
+
+【基础阶段 第1-{days//3}天】
+• 背完核心高频词汇
+• 精听真题对话，积累场景词
+• 每天1篇仔细阅读，分析长难句
+
+【强化阶段 第{days//3+1}-{days*2//3}天】
+• 二刷词汇，重点记生词
+• 整套听力训练，总结错题
+• 阅读提速，学习解题技巧
+• 每周写2篇作文，背模板
+
+【冲刺阶段 第{days*2//3+1}-{days}天】
+• 整套真题模考，掐时间
+• 复习错题本
+• 背诵作文万能句型
+• 调整作息，保持状态
+"""
+            self.plan_text.delete("1.0", "end")
+            self.plan_text.insert("end", plan)
+
+            # 画时间分配饼图
+            self.plan_fig.clear()
+            ax = self.plan_fig.add_subplot(111)
+            ax.pie(time_dist.values(), labels=time_dist.keys(),
+                   autopct="%1.1f%%", colors=["#3b82f6", "#10b981", "#f59e0b", "#ef4444"], startangle=90)
+            ax.set_title("每日学习时间分配")
+            self.plan_canvas.draw()
+
+        except ValueError:
+            messagebox.showerror("错误", "请输入有效数字！")
+
+    # ===================== 6. 学习数据可视化模块 =====================
+    def build_analysis_page(self):
+        page = ttk.Frame(self.notebook)
+        self.notebook.add(page, text="学习数据分析")
+
+        left = tk.Frame(page, padx=20, pady=20)
+        left.pack(side="left", fill="y")
+
+        tk.Label(left, text="学习数据总览", font=("微软雅黑", 12, "bold")).pack(anchor="w", pady=(0,10))
+
+        self.stats_text = tk.Text(left, width=30, height=15, font=("微软雅黑", 10))
+        self.stats_text.pack(pady=5)
+
+        tk.Button(left, text="刷新数据", command=self.refresh_stats, width=18, bg="#1a56db", fg="white").pack(pady=10)
+
+        # 右侧双图：能力雷达图 + 模考趋势
+        self.analysis_fig = plt.Figure(figsize=(6, 5), dpi=100)
+        self.analysis_canvas = FigureCanvasTkAgg(self.analysis_fig, master=page)
+        self.analysis_canvas.get_tk_widget().pack(side="right", padx=10, pady=10)
+        self.refresh_stats()
+
+    def refresh_stats(self):
+        vocab_rate = len(self.study_data["vocab_mastered"]) / self.vocab_total * 100 if self.vocab_total > 0 else 0
+        listen_rate = self.listen_correct / self.listen_total * 100 if self.listen_total > 0 else 60
+        read_rate = self.read_correct / self.read_total * 100 if self.read_total > 0 else 60
+        writing_rate = 70
+
+        latest_exam = self.study_data["exam_scores"][-1] if self.study_data["exam_scores"] else 0
+
+        stats = f"""
+【学习进度统计】
+
+词汇掌握度：{vocab_rate:.1f}%
+已掌握单词：{len(self.study_data['vocab_mastered'])} / {self.vocab_total}
+
+听力正确率：{listen_rate:.1f}%
+答对：{self.listen_correct} / {self.listen_total} 题
+
+阅读正确率：{read_rate:.1f}%
+答对：{self.read_correct} / {self.read_total} 题
+
+写作参考分：{writing_rate} 分
+
+最近模考得分：{latest_exam:.1f} 分
+
+综合测评得分：
+{(vocab_rate*0.3 + listen_rate*0.25 + read_rate*0.25 + writing_rate*0.2):.1f} 分
+"""
+        self.stats_text.delete("1.0", "end")
+        self.stats_text.insert("end", stats)
+
+        # 雷达图
+        self.analysis_fig.clear()
+        ax = self.analysis_fig.add_subplot(111, polar=True)
+        categories = ["词汇", "听力", "阅读", "写作"]
+        scores = [vocab_rate, listen_rate, read_rate, writing_rate]
+        scores += scores[:1]
+        angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False)
+        angles = np.append(angles, angles[0])
+
+        ax.plot(angles, scores, 'o-', color="#1a56db", linewidth=2)
+        ax.fill(angles, scores, alpha=0.25, color="#1a56db")
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(categories)
+        ax.set_ylim(0, 100)
+        ax.set_title("四级能力雷达图", pad=15, fontsize=12)
+        self.analysis_canvas.draw()
+
+
+if __name__ == "__main__":
+    app = CET4Simulator()
+    app.mainloop()
